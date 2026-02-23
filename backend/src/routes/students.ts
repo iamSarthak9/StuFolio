@@ -407,7 +407,7 @@ router.delete("/me/coding-profiles/:id", authenticateToken, requireRole("STUDENT
 
         // Make sure the profile belongs to this student
         const profile = await prisma.codingProfile.findFirst({
-            where: { id: req.params.id, studentId: user.student.id },
+            where: { id: req.params.id as string, studentId: user.student.id },
         });
 
         if (!profile) return res.status(404).json({ error: "Profile not found" });
@@ -425,7 +425,7 @@ router.delete("/me/coding-profiles/:id", authenticateToken, requireRole("STUDENT
 router.get("/:id", authenticateToken, requireRole("MENTOR"), async (req: AuthRequest, res: Response) => {
     try {
         const student = await prisma.student.findUnique({
-            where: { id: req.params.id },
+            where: { id: req.params.id as string },
             include: {
                 user: { select: { name: true, email: true } },
                 semesterCGPAs: { orderBy: { semester: "asc" } },
@@ -442,8 +442,8 @@ router.get("/:id", authenticateToken, requireRole("MENTOR"), async (req: AuthReq
         return res.json({
             profile: {
                 id: student.id,
-                name: student.user.name,
-                email: student.user.email,
+                name: (student as any).user.name,
+                email: (student as any).user.email,
                 enrollment: student.enrollment,
                 section: student.section,
                 semester: student.semester,
@@ -452,22 +452,22 @@ router.get("/:id", authenticateToken, requireRole("MENTOR"), async (req: AuthReq
                 cgpa: student.cgpa,
                 rank: student.rank,
             },
-            semesterCGPAs: student.semesterCGPAs.map((sc) => ({ sem: sc.semester, cgpa: sc.cgpa })),
-            attendance: student.attendances.map((a) => ({
+            semesterCGPAs: (student as any).semesterCGPAs.map((sc: any) => ({ sem: sc.semester, cgpa: sc.cgpa })),
+            attendance: (student as any).attendances.map((a: any) => ({
                 subject: a.subject.name,
                 code: a.subject.code,
                 attended: a.attended,
                 total: a.total,
                 percentage: Number(((a.attended / a.total) * 100).toFixed(1)),
             })),
-            codingProfiles: student.codingProfiles.map((cp) => ({
+            codingProfiles: (student as any).codingProfiles.map((cp: any) => ({
                 platform: cp.platform,
                 handle: cp.handle,
                 stats: JSON.parse(cp.stats),
             })),
-            badges: student.badges.map((b) => ({ label: b.label, earned: b.earned })),
-            skills: student.skills.map((ss) => ss.skill.name),
-            academicRecords: student.academicRecords.map((r) => ({
+            badges: (student as any).badges.map((b: any) => ({ label: b.label, earned: b.earned })),
+            skills: (student as any).skills.map((ss: any) => ss.skill.name),
+            academicRecords: (student as any).academicRecords.map((r: any) => ({
                 subject: r.subject.name,
                 code: r.subject.code,
                 marks: r.marks,
