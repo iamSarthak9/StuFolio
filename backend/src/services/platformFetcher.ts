@@ -104,7 +104,7 @@ async function fetchCodeforces(handle: string): Promise<PlatformStats> {
     const username = handle.replace(/^@/, "");
 
     try {
-        const res = await fetch(`https://codeforces.com/api/user.info?handles=${username}`);
+        const res = await fetch(`https://codeforces.com/api/user.info?handles=${encodeURIComponent(username)}`);
 
         if (!res.ok) throw new Error("Codeforces API error");
 
@@ -124,7 +124,8 @@ async function fetchCodeforces(handle: string): Promise<PlatformStats> {
         const activity: Record<string, number> = {};
 
         try {
-            const subRes = await fetch(`https://codeforces.com/api/user.status?handle=${username}`);
+            console.log(`[Fetcher] Fetching submissions for CF user: ${username}`);
+            const subRes = await fetch(`https://codeforces.com/api/user.status?handle=${encodeURIComponent(username)}`);
             if (subRes.ok) {
                 const subData = (await subRes.json()) as any;
                 if (subData.status === "OK") {
@@ -132,15 +133,22 @@ async function fetchCodeforces(handle: string): Promise<PlatformStats> {
                     for (const sub of subData.result) {
                         const date = new Date(sub.creationTimeSeconds * 1000).toISOString().split("T")[0];
                         if (sub.verdict === "OK" && sub.problem) {
-                            solved.add(`${sub.problem.contestId}-${sub.problem.index}`);
+                            const pId = sub.problem.contestId ? `${sub.problem.contestId}-${sub.problem.index}` : `unknown-${sub.problem.name}`;
+                            solved.add(pId);
                             activity[date] = (activity[date] || 0) + 1;
                         }
                     }
                     problemsSolved = solved.size;
+                    console.log(`[Fetcher] Found ${subData.result.length} submissions, ${problemsSolved} unique solved for ${username}`);
+                } else {
+                    console.warn(`[Fetcher] Codeforces status API returned non-OK status: ${subData.status}`);
                 }
+            } else {
+                const errText = await subRes.text().catch(() => "N/A");
+                console.warn(`[Fetcher] Codeforces submissions fetch failed for ${username}: ${subRes.status} ${subRes.statusText}`, errText.substring(0, 100));
             }
-        } catch {
-            // Optional fetch
+        } catch (subErr) {
+            console.error(`[Fetcher] Error fetching Codeforces submissions for ${username}:`, subErr);
         }
 
         const stats: { label: string; value: string }[] = [
