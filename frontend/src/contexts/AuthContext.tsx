@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { useUser, useAuth as useClerkAuth, useSignIn, useSignUp } from "@clerk/clerk-react";
 import api from "@/lib/api";
 
 interface User {
@@ -17,106 +16,55 @@ interface AuthContextType {
     isAuthenticated: boolean;
     login: (email: string, password: string) => Promise<void>;
     register: (userData: Record<string, any>) => Promise<void>;
-    logout: () => Promise<void>;
-    signInWithGoogle: () => Promise<void>;
+    logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-    const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
-    const { getToken, signOut } = useClerkAuth();
-    const { signIn } = useSignIn();
-    const { signUp } = useSignUp();
-
     const [user, setUser] = useState<User | null>(null);
-    const [isSyncing, setIsSyncing] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Sync Clerk user with our backend
     useEffect(() => {
-        const syncUser = async () => {
-            if (!clerkLoaded) return;
-
-            if (clerkUser) {
-                setIsSyncing(true);
-                try {
-                    const token = await getToken();
-                    if (token) {
-                        api.setToken(token);
-                        // Call backend to sync/get local user info
-                        const data = await api.request<any>("/auth/sync", {
-                            method: "POST",
-                            body: JSON.stringify({
-                                clerkId: clerkUser.id,
-                                email: clerkUser.primaryEmailAddress?.emailAddress,
-                                name: clerkUser.fullName || clerkUser.username || "User",
-                            })
-                        });
-                        setUser(data.user);
-                    }
-                } catch (err) {
-                    console.error("User sync failed:", err);
-                    setUser(null);
-                } finally {
-                    setIsSyncing(false);
-                }
-            } else {
-                setUser(null);
-                api.setToken(null);
-                setIsSyncing(false);
+        // Check for existing session
+        const savedUser = localStorage.getItem("stufolio_user");
+        const token = api.getToken();
+        if (savedUser && token) {
+            try {
+                setUser(JSON.parse(savedUser));
+            } catch {
+                api.logout();
             }
-        };
-
-        syncUser();
-    }, [clerkUser, clerkLoaded, getToken]);
+        }
+        setIsLoading(false);
+    }, []);
 
     const login = async (email: string, password: string) => {
-        if (!signIn) return;
-        const result = await signIn.create({
-            identifier: email,
-            password,
-        });
-        if (result.status !== "complete") {
-            throw new Error("Login incomplete, please check your credentials.");
-        }
+        const data = await api.login(email, password);
+        setUser(data.user);
+        localStorage.setItem("stufolio_user", JSON.stringify(data.user));
     };
 
     const register = async (userData: Record<string, any>) => {
-        if (!signUp) return;
-        await signUp.create({
-            emailAddress: userData.email,
-            password: userData.password,
-            firstName: userData.name.split(" ")[0],
-            lastName: userData.name.split(" ").slice(1).join(" "),
-        });
-        await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+        const data = await api.register(userData);
+        setUser(data.user);
+        localStorage.setItem("stufolio_user", JSON.stringify(data.user));
     };
 
-    const logout = async () => {
-        await signOut();
+    const logout = () => {
+        api.logout();
         setUser(null);
-    };
-
-    const signInWithGoogle = async () => {
-        if (!signIn) return;
-        // Redirect back to login so sync can happen before reaching protected dashboard
-        await signIn.authenticateWithRedirect({
-            strategy: "oauth_google",
-            redirectUrl: "/login",
-            redirectUrlComplete: "/login",
-        });
     };
 
     return (
         <AuthContext.Provider
             value={{
                 user,
-                isLoading: !clerkLoaded || isSyncing,
-                isAuthenticated: !!clerkUser,
+                isLoading,
+                isAuthenticated: !!user,
                 login,
                 register,
                 logout,
-                signInWithGoogle,
             }}
         >
             {children}

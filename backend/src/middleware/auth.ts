@@ -1,18 +1,16 @@
 import { Request, Response, NextFunction } from "express";
-import { createClerkClient } from "@clerk/clerk-sdk-node";
-import prisma from "../lib/prisma";
+import jwt from "jsonwebtoken";
 
-const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+const JWT_SECRET = process.env.JWT_SECRET || "stufolio-secret-key-dev";
 
 export interface AuthRequest extends Request {
     user?: {
         userId: string;
         role: string;
-        clerkId: string;
     };
 }
 
-export async function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
+export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
     const authHeader = req.headers["authorization"];
     const token = authHeader && authHeader.split(" ")[1]; // Bearer TOKEN
 
@@ -21,28 +19,11 @@ export async function authenticateToken(req: AuthRequest, res: Response, next: N
     }
 
     try {
-        // Verify session with Clerk
-        const session = await clerk.verifyToken(token);
-
-        // Find local user by clerkId
-        const user = await prisma.user.findUnique({
-            where: { clerkId: session.sub },
-            include: { student: true, mentor: true }
-        });
-
-        if (!user) {
-            return res.status(401).json({ error: "User not synchronized. Please log in again." });
-        }
-
-        req.user = {
-            userId: user.id,
-            role: user.role,
-            clerkId: session.sub,
-        };
+        const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; role: string };
+        req.user = decoded;
         next();
-    } catch (err) {
-        console.error("Clerk auth error:", err);
-        return res.status(403).json({ error: "Invalid or expired session" });
+    } catch {
+        return res.status(403).json({ error: "Invalid or expired token" });
     }
 }
 
@@ -57,3 +38,5 @@ export function requireRole(...roles: string[]) {
         next();
     };
 }
+
+export { JWT_SECRET };
