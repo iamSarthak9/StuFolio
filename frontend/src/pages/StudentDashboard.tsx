@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   TrendingUp,
@@ -11,8 +12,9 @@ import {
   AlertTriangle,
   Calendar,
   ExternalLink,
-  GitBranch,
   Sparkles,
+  Loader2,
+  Trophy,
 } from "lucide-react";
 import {
   AreaChart,
@@ -26,8 +28,14 @@ import {
   Bar,
 } from "recharts";
 import DashboardLayout from "@/components/DashboardLayout";
+import api from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
-const performanceData = [
+const iconMap: Record<string, any> = {
+  TrendingUp, Code, GraduationCap, Flame, Target, Award, BookOpen, CheckCircle, Trophy,
+};
+
+const performanceDataFallback = [
   { week: "W1", coding: 45, academic: 72 },
   { week: "W2", coding: 52, academic: 70 },
   { week: "W3", coding: 61, academic: 75 },
@@ -38,45 +46,12 @@ const performanceData = [
   { week: "W8", coding: 90, academic: 85 },
 ];
 
-const subjectData = [
+const subjectDataFallback = [
   { subject: "DSA", score: 88 },
   { subject: "OS", score: 72 },
   { subject: "DBMS", score: 91 },
   { subject: "CN", score: 65 },
   { subject: "OOP", score: 85 },
-];
-
-const badges = [
-  { icon: Flame, label: "7-Day Streak", earned: true },
-  { icon: Code, label: "100 Problems", earned: true },
-  { icon: GraduationCap, label: "9+ CGPA", earned: false },
-  { icon: Target, label: "Top 5 Class", earned: true },
-  { icon: Award, label: "CodeChef 4★", earned: false },
-  { icon: BookOpen, label: "All Assignments", earned: true },
-];
-
-const statCards = [
-  { label: "Performance Index", value: "82.4", change: "+5.2% this month", icon: TrendingUp, accent: "primary" },
-  { label: "Current CGPA", value: "8.42", change: "↑ 0.3 from last sem", icon: GraduationCap, accent: "accent" },
-  { label: "Problems Solved", value: "347", change: "+28 this week", icon: Code, accent: "chart-3" },
-  { label: "Attendance", value: "78%", change: "3 classes to 80%", icon: CheckCircle, accent: "warning" },
-];
-
-const codingProfiles = [
-  { platform: "LeetCode", handle: "@nakul_g", solved: 234, rating: 1590, color: "text-amber-400", bg: "bg-amber-400/10" },
-  { platform: "Codeforces", handle: "@nakul_cf", solved: 89, rating: 1350, color: "text-blue-400", bg: "bg-blue-400/10" },
-  { platform: "GitHub", handle: "@nakulgupta", repos: 24, contributions: 847, color: "text-gray-300", bg: "bg-gray-400/10" },
-];
-
-const upcomingEvents = [
-  { title: "LeetCode Biweekly 148", date: "Feb 24", type: "contest", color: "bg-amber-400/10 text-amber-400" },
-  { title: "CN Assignment Due", date: "Feb 26", type: "deadline", color: "bg-destructive/10 text-destructive" },
-  { title: "DBMS Lab Exam", date: "Mar 2", type: "exam", color: "bg-primary/10 text-primary" },
-];
-
-const warnings = [
-  { text: "CN attendance at 68% — below 75% eligibility threshold!", type: "danger" },
-  { text: "OS score dropped 8% from last assessment. Review recommended.", type: "warning" },
 ];
 
 const fadeUp = {
@@ -95,20 +70,98 @@ const tooltipStyle = {
 };
 
 const StudentDashboard = () => {
+  const { user } = useAuth();
+  const [data, setData] = useState<any>(null);
+  const [events, setEvents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [dashboard, eventsData] = await Promise.all([
+          api.getStudentDashboard(),
+          api.getEvents().catch(() => []),
+        ]);
+        setData(dashboard);
+        setEvents(eventsData.slice(0, 3));
+      } catch (err) {
+        console.error("Failed to load dashboard:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const userName = data?.profile?.name || user?.name || "Student";
+
+  // Use API data or fallback
+  const statCards = data?.statCards
+    ? data.statCards.map((s: any) => ({
+      ...s,
+      icon: iconMap[s.icon] || TrendingUp,
+    }))
+    : [
+      { label: "Performance Index", value: "—", change: "Loading...", icon: TrendingUp, accent: "primary" },
+      { label: "Current CGPA", value: "—", change: "Loading...", icon: GraduationCap, accent: "accent" },
+      { label: "Problems Solved", value: "—", change: "Loading...", icon: Code, accent: "chart-3" },
+      { label: "Day Streak", value: "—", change: "Loading...", icon: Flame, accent: "warning" },
+    ];
+
+  const warnings = data?.warnings || [];
+  const badges = data?.badges
+    ? data.badges.map((b: any) => ({
+      ...b,
+      icon: iconMap[b.icon] || Award,
+      earned: true,
+    }))
+    : [];
+  const codingProfiles = data?.codingProfiles || [];
+
+  const performanceData = data?.performanceTrend?.length
+    ? data.performanceTrend.map((d: any, i: number) => ({
+      week: d.semester || `S${i + 1}`,
+      cgpa: d.cgpa,
+    }))
+    : null;
+
+  const upcomingEvents = events.length
+    ? events.map((e: any) => ({
+      title: e.title,
+      date: new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      type: e.type,
+      color: e.type === "contest" ? "bg-amber-400/10 text-amber-400" :
+        e.type === "deadline" ? "bg-destructive/10 text-destructive" :
+          "bg-primary/10 text-primary",
+    }))
+    : [
+      { title: "No upcoming events", date: "", type: "info", color: "bg-secondary/50 text-muted-foreground" },
+    ];
+
+  if (loading) {
+    return (
+      <DashboardLayout title="Dashboard" subtitle="Loading..." role="student">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
-    <DashboardLayout title="Dashboard" subtitle="Welcome back, Nakul 👋" role="student">
+    <DashboardLayout title="Dashboard" subtitle={`Welcome back, ${userName.split(" ")[0]} 👋`} role="student">
       {/* Warning Alerts */}
       {warnings.length > 0 && (
         <div className="space-y-2 mb-6">
-          {warnings.map((w, i) => (
+          {warnings.map((w: any, i: number) => (
             <motion.div
               key={i}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.1 }}
               className={`flex items-center gap-3 rounded-xl p-3.5 text-sm ${w.type === "danger"
-                  ? "bg-destructive/10 border border-destructive/20 text-destructive"
-                  : "bg-warning/10 border border-warning/20 text-warning"
+                ? "bg-destructive/10 border border-destructive/20 text-destructive"
+                : "bg-warning/10 border border-warning/20 text-warning"
                 }`}
             >
               <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -120,7 +173,7 @@ const StudentDashboard = () => {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {statCards.map((stat, i) => (
+        {statCards.map((stat: any, i: number) => (
           <motion.div
             key={stat.label}
             custom={i}
@@ -132,9 +185,9 @@ const StudentDashboard = () => {
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-medium text-muted-foreground">{stat.label}</span>
               <div className={`h-9 w-9 rounded-xl flex items-center justify-center ${stat.accent === "primary" ? "bg-primary/10 text-primary" :
-                  stat.accent === "accent" ? "bg-accent/10 text-accent" :
-                    stat.accent === "chart-3" ? "bg-purple-500/10 text-purple-400" :
-                      "bg-warning/10 text-warning"
+                stat.accent === "accent" ? "bg-accent/10 text-accent" :
+                  stat.accent === "chart-3" ? "bg-purple-500/10 text-purple-400" :
+                    "bg-warning/10 text-warning"
                 }`}>
                 <stat.icon className="h-4 w-4" />
               </div>
@@ -159,8 +212,9 @@ const StudentDashboard = () => {
           <div>
             <h3 className="font-display font-semibold text-foreground text-sm mb-1">AI Insight</h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Your coding performance is trending upward (+18% this month) 📈. Focus on Computer Networks — it's your weakest subject at 65%.
-              Attending 3 more CN classes will secure your eligibility. Consider solving 5 graph problems on LeetCode to strengthen your DSA weak areas.
+              {warnings.length > 0
+                ? `Focus areas detected: ${warnings.map((w: any) => w.text.split(" ")[0]).join(", ")}. Keep building your coding streak and attend upcoming classes to strengthen eligibility.`
+                : "Your coding performance is trending upward 📈. Keep up the great work!"}
             </p>
           </div>
         </div>
@@ -175,26 +229,44 @@ const StudentDashboard = () => {
           className="lg:col-span-2 rounded-xl border border-border bg-card p-6"
         >
           <h3 className="font-display font-semibold text-foreground mb-1">Growth Trend</h3>
-          <p className="text-xs text-muted-foreground mb-6">Coding vs Academic performance over 8 weeks</p>
+          <p className="text-xs text-muted-foreground mb-6">
+            {performanceData ? "CGPA progression across semesters" : "Coding vs Academic performance over 8 weeks"}
+          </p>
           <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={performanceData}>
-              <defs>
-                <linearGradient id="colorCoding" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="colorAcademic" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 16%, 14%)" />
-              <XAxis dataKey="week" tick={{ fill: "hsl(215, 15%, 50%)", fontSize: 12 }} axisLine={false} />
-              <YAxis tick={{ fill: "hsl(215, 15%, 50%)", fontSize: 12 }} axisLine={false} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Area type="monotone" dataKey="coding" stroke="hsl(217, 91%, 60%)" fill="url(#colorCoding)" strokeWidth={2} name="Coding" />
-              <Area type="monotone" dataKey="academic" stroke="hsl(160, 84%, 39%)" fill="url(#colorAcademic)" strokeWidth={2} name="Academic" />
-            </AreaChart>
+            {performanceData ? (
+              <AreaChart data={performanceData}>
+                <defs>
+                  <linearGradient id="colorCgpa" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 16%, 14%)" />
+                <XAxis dataKey="week" tick={{ fill: "hsl(215, 15%, 50%)", fontSize: 12 }} axisLine={false} />
+                <YAxis tick={{ fill: "hsl(215, 15%, 50%)", fontSize: 12 }} axisLine={false} domain={[6, 10]} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Area type="monotone" dataKey="cgpa" stroke="hsl(217, 91%, 60%)" fill="url(#colorCgpa)" strokeWidth={2} name="CGPA" />
+              </AreaChart>
+            ) : (
+              <AreaChart data={performanceDataFallback}>
+                <defs>
+                  <linearGradient id="colorCoding" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="colorAcademic" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="hsl(160, 84%, 39%)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 16%, 14%)" />
+                <XAxis dataKey="week" tick={{ fill: "hsl(215, 15%, 50%)", fontSize: 12 }} axisLine={false} />
+                <YAxis tick={{ fill: "hsl(215, 15%, 50%)", fontSize: 12 }} axisLine={false} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Area type="monotone" dataKey="coding" stroke="hsl(217, 91%, 60%)" fill="url(#colorCoding)" strokeWidth={2} name="Coding" />
+                <Area type="monotone" dataKey="academic" stroke="hsl(160, 84%, 39%)" fill="url(#colorAcademic)" strokeWidth={2} name="Academic" />
+              </AreaChart>
+            )}
           </ResponsiveContainer>
         </motion.div>
 
@@ -208,7 +280,7 @@ const StudentDashboard = () => {
           <h3 className="font-display font-semibold text-foreground mb-1">Subject Scores</h3>
           <p className="text-xs text-muted-foreground mb-6">Internal assessment breakdown</p>
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={subjectData} layout="vertical">
+            <BarChart data={subjectDataFallback} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 16%, 14%)" horizontal={false} />
               <XAxis type="number" tick={{ fill: "hsl(215, 15%, 50%)", fontSize: 12 }} axisLine={false} domain={[0, 100]} />
               <YAxis type="category" dataKey="subject" tick={{ fill: "hsl(215, 15%, 50%)", fontSize: 12 }} axisLine={false} width={50} />
@@ -230,25 +302,31 @@ const StudentDashboard = () => {
           <h3 className="font-display font-semibold text-foreground mb-1">Coding Profiles</h3>
           <p className="text-xs text-muted-foreground mb-4">Your linked competitive programming accounts</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {codingProfiles.map((p) => (
-              <div key={p.platform} className={`rounded-xl border border-border p-4 ${p.bg}`}>
-                <div className="flex items-center justify-between mb-3">
-                  <span className={`font-display font-semibold text-sm ${p.color}`}>{p.platform}</span>
-                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-                </div>
-                <p className="text-xs text-muted-foreground mb-2">{p.handle}</p>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">{p.platform === "GitHub" ? "Repos" : "Solved"}</span>
-                    <span className="text-foreground font-medium">{p.platform === "GitHub" ? p.repos : p.solved}</span>
+            {codingProfiles.map((p: any) => {
+              const colorMap: Record<string, { text: string; bg: string }> = {
+                LeetCode: { text: "text-amber-400", bg: "bg-amber-400/10" },
+                Codeforces: { text: "text-blue-400", bg: "bg-blue-400/10" },
+                GitHub: { text: "text-gray-300", bg: "bg-gray-400/10" },
+              };
+              const colors = colorMap[p.platform] || { text: "text-primary", bg: "bg-primary/10" };
+              return (
+                <div key={p.platform} className={`rounded-xl border border-border p-4 ${colors.bg}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className={`font-display font-semibold text-sm ${colors.text}`}>{p.platform}</span>
+                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
                   </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">{p.platform === "GitHub" ? "Contributions" : "Rating"}</span>
-                    <span className="text-foreground font-medium">{p.platform === "GitHub" ? p.contributions : p.rating}</span>
+                  <p className="text-xs text-muted-foreground mb-2">{p.handle}</p>
+                  <div className="space-y-1">
+                    {p.stats?.map((stat: any, idx: number) => (
+                      <div key={idx} className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">{stat.label}</span>
+                        <span className="text-foreground font-medium">{stat.value}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </motion.div>
 
@@ -267,7 +345,7 @@ const StudentDashboard = () => {
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </div>
           <div className="space-y-3">
-            {upcomingEvents.map((event) => (
+            {upcomingEvents.map((event: any) => (
               <div key={event.title} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors cursor-pointer">
                 <div className={`h-2 w-2 rounded-full ${event.color.replace('text-', 'bg-').split(' ')[0]}`} />
                 <div className="flex-1 min-w-0">
@@ -281,32 +359,30 @@ const StudentDashboard = () => {
       </div>
 
       {/* Badges */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.55 }}
-        className="rounded-xl border border-border bg-card p-6"
-      >
-        <h3 className="font-display font-semibold text-foreground mb-1">Achievements</h3>
-        <p className="text-xs text-muted-foreground mb-6">Your earned badges and milestones</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-          {badges.map((badge) => (
-            <div
-              key={badge.label}
-              className={`flex flex-col items-center gap-2.5 rounded-xl border p-4 transition-all ${badge.earned
-                  ? "border-primary/30 bg-primary/5 card-hover"
-                  : "border-border bg-secondary/20 opacity-40"
-                }`}
-            >
-              <div className={`h-11 w-11 rounded-full flex items-center justify-center ${badge.earned ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
-                }`}>
-                <badge.icon className="h-5 w-5" />
+      {badges.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.55 }}
+          className="rounded-xl border border-border bg-card p-6"
+        >
+          <h3 className="font-display font-semibold text-foreground mb-1">Achievements</h3>
+          <p className="text-xs text-muted-foreground mb-6">Your earned badges and milestones</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            {badges.map((badge: any) => (
+              <div
+                key={badge.label}
+                className="flex flex-col items-center gap-2.5 rounded-xl border p-4 transition-all border-primary/30 bg-primary/5 card-hover"
+              >
+                <div className="h-11 w-11 rounded-full flex items-center justify-center bg-primary/20 text-primary">
+                  <badge.icon className="h-5 w-5" />
+                </div>
+                <span className="text-xs font-medium text-center text-foreground">{badge.label}</span>
               </div>
-              <span className="text-xs font-medium text-center text-foreground">{badge.label}</span>
-            </div>
-          ))}
-        </div>
-      </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
     </DashboardLayout>
   );
 };

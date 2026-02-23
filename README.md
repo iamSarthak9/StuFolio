@@ -7,35 +7,60 @@ A comprehensive student portfolio & analytics platform for colleges — tracking
 ```
 StuFolio/
 ├── frontend/    # React + Vite + TypeScript + Tailwind CSS + shadcn/ui
-├── backend/     # (coming soon)
+├── backend/     # Node.js + Express + TypeScript + Prisma + SQLite
 └── README.md
 ```
 
-## Frontend
+## Quick Start
 
-The frontend is built with **React**, **TypeScript**, **Vite**, **Tailwind CSS**, **shadcn/ui**, **Recharts**, and **Framer Motion**.
+### Backend
+```bash
+cd backend
+npm install
+npx prisma db push        # Create database tables
+npm run seed               # Populate with demo data
+npm run dev                # Start API server on port 3001
+```
 
-### Getting Started
-
+### Frontend
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev                # Start dev server on port 8080
 ```
 
-### Features
+### Demo Accounts
+| Role | Email | Password |
+|------|-------|----------|
+| Student | nakul.gupta@campus.edu | password123 |
+| Mentor | dr.sharma@campus.edu | password123 |
 
-- **Student Dashboard** — Performance stats, coding profiles, AI insights
-- **Student Profile** — Academic info, coding platform stats, badges
-- **AI Analysis** — GPA prediction, strength/weakness radar, goal simulator
-- **Calendar & Events** — Contest alerts, assignment deadlines, exam schedule
-- **Attendance Tracker** — Subject-wise tracking, eligibility prediction
-- **Career & Skills** — Placement readiness, skill gap analysis, certifications
-- **Mentor Dashboard** — Class overview, at-risk alerts, CGPA distribution
-- **Mentor Analytics** — Batch trends, performance bands, coding activity
-- **Leaderboard** — Coding + academic ranking with privacy-safe scores
-- **AI Chatbot** — Floating assistant for navigation help
-- **Settings** — Profile, linked accounts, privacy, notifications
+## API Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/health` | — | Health check |
+| POST | `/api/auth/register` | — | Create account |
+| POST | `/api/auth/login` | — | Login, returns JWT |
+| GET | `/api/students/me` | Student | Dashboard data |
+| GET | `/api/students/me/profile` | Student | Full profile |
+| GET | `/api/students/me/attendance` | Student | Attendance data |
+| GET | `/api/students/me/academics` | Student | Academic records |
+| GET | `/api/students/:id` | Mentor | Student detail |
+| GET | `/api/mentor/dashboard` | Mentor | Class overview |
+| GET | `/api/mentor/students` | Mentor | Student list |
+| GET | `/api/mentor/analytics` | Mentor | Batch analytics |
+| GET | `/api/leaderboard` | Any | Ranked students |
+| GET | `/api/events` | Any | Calendar events |
+| POST | `/api/events` | Mentor | Create event |
+| GET | `/api/notifications` | Any | User notifications |
+| PATCH | `/api/notifications/:id/read` | Any | Mark read |
+
+## Tech Stack
+
+- **Frontend**: React, TypeScript, Vite, Tailwind CSS, shadcn/ui, Recharts, Framer Motion
+- **Backend**: Node.js, Express, TypeScript, Prisma ORM
+- **Database**: SQLite (dev) — easily switchable to PostgreSQL
 
 ## License
 

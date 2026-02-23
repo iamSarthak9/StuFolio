@@ -3,6 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import StudentDashboard from "./pages/StudentDashboard";
@@ -22,36 +24,38 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          {/* Public */}
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<LoginPage />} />
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            {/* Public */}
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/login" element={<LoginPage />} />
 
-          {/* Student */}
-          <Route path="/dashboard" element={<StudentDashboard />} />
-          <Route path="/profile" element={<StudentProfile />} />
-          <Route path="/ai-analysis" element={<AIAnalysis />} />
-          <Route path="/calendar" element={<CalendarPage />} />
-          <Route path="/attendance" element={<AttendancePage />} />
-          <Route path="/career" element={<CareerPage />} />
-          <Route path="/leaderboard" element={<LeaderboardPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+            {/* Student */}
+            <Route path="/dashboard" element={<ProtectedRoute requiredRole="STUDENT"><StudentDashboard /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute requiredRole="STUDENT"><StudentProfile /></ProtectedRoute>} />
+            <Route path="/ai-analysis" element={<ProtectedRoute requiredRole="STUDENT"><AIAnalysis /></ProtectedRoute>} />
+            <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
+            <Route path="/attendance" element={<ProtectedRoute requiredRole="STUDENT"><AttendancePage /></ProtectedRoute>} />
+            <Route path="/career" element={<ProtectedRoute requiredRole="STUDENT"><CareerPage /></ProtectedRoute>} />
+            <Route path="/leaderboard" element={<ProtectedRoute><LeaderboardPage /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
 
-          {/* Mentor */}
-          <Route path="/mentor" element={<MentorDashboard />} />
-          <Route path="/mentor/students" element={<MentorStudentDetail />} />
-          <Route path="/mentor/analytics" element={<MentorAnalytics />} />
-          <Route path="/mentor/settings" element={<SettingsPage />} />
+            {/* Mentor */}
+            <Route path="/mentor" element={<ProtectedRoute requiredRole="MENTOR"><MentorDashboard /></ProtectedRoute>} />
+            <Route path="/mentor/students" element={<ProtectedRoute requiredRole="MENTOR"><MentorStudentDetail /></ProtectedRoute>} />
+            <Route path="/mentor/analytics" element={<ProtectedRoute requiredRole="MENTOR"><MentorAnalytics /></ProtectedRoute>} />
+            <Route path="/mentor/settings" element={<ProtectedRoute requiredRole="MENTOR"><SettingsPage /></ProtectedRoute>} />
 
-          {/* 404 */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+            {/* 404 */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 

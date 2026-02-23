@@ -4,19 +4,48 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowRight, GraduationCap, Users, Shield, Sparkles, Code, BarChart3 } from "lucide-react";
+import { ArrowRight, GraduationCap, Users, Shield, Sparkles, Code, BarChart3, Loader2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 const LoginPage = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [role, setRole] = useState<"student" | "mentor">("student");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [enrollment, setEnrollment] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { login, register } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (role === "mentor") {
-      navigate("/mentor");
-    } else {
-      navigate("/dashboard");
+    setError("");
+    setLoading(true);
+
+    try {
+      if (isLogin) {
+        await login(email, password);
+      } else {
+        await register({
+          email,
+          password,
+          name,
+          role: role === "student" ? "STUDENT" : "MENTOR",
+          enrollment: role === "student" ? enrollment : undefined,
+        });
+      }
+
+      if (role === "mentor") {
+        navigate("/mentor");
+      } else {
+        navigate("/dashboard");
+      }
+    } catch (err: any) {
+      setError(err.message || "Authentication failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -90,13 +119,13 @@ const LoginPage = () => {
             {isLogin ? "Sign in to your StuFolio account" : "Join your campus community"}
           </p>
 
-          {/* Role selector — always visible */}
+          {/* Role selector */}
           <div className="flex gap-3 mb-6">
             <button
               onClick={() => setRole("student")}
               className={`flex-1 flex items-center justify-center gap-2 rounded-xl border p-3.5 text-sm font-medium transition-all ${role === "student"
-                  ? "border-primary bg-primary/10 text-primary shadow-sm"
-                  : "border-border text-muted-foreground hover:border-primary/30 hover:bg-secondary/50"
+                ? "border-primary bg-primary/10 text-primary shadow-sm"
+                : "border-border text-muted-foreground hover:border-primary/30 hover:bg-secondary/50"
                 }`}
             >
               <GraduationCap className="h-4 w-4" />
@@ -105,8 +134,8 @@ const LoginPage = () => {
             <button
               onClick={() => setRole("mentor")}
               className={`flex-1 flex items-center justify-center gap-2 rounded-xl border p-3.5 text-sm font-medium transition-all ${role === "mentor"
-                  ? "border-primary bg-primary/10 text-primary shadow-sm"
-                  : "border-border text-muted-foreground hover:border-primary/30 hover:bg-secondary/50"
+                ? "border-primary bg-primary/10 text-primary shadow-sm"
+                : "border-border text-muted-foreground hover:border-primary/30 hover:bg-secondary/50"
                 }`}
             >
               <Users className="h-4 w-4" />
@@ -114,18 +143,35 @@ const LoginPage = () => {
             </button>
           </div>
 
+          {error && (
+            <div className="mb-4 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+              {error}
+            </div>
+          )}
+
           <form className="space-y-4" onSubmit={handleSubmit}>
             {!isLogin && (
               <div className="space-y-2">
                 <Label className="text-foreground text-sm">Full Name</Label>
-                <Input placeholder="Nakul Gupta" className="bg-secondary/50 border-border text-foreground h-11 rounded-xl" />
+                <Input
+                  placeholder="Nakul Gupta"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className="bg-secondary/50 border-border text-foreground h-11 rounded-xl"
+                />
               </div>
             )}
 
             {!isLogin && role === "student" && (
               <div className="space-y-2">
                 <Label className="text-foreground text-sm">Enrollment Number</Label>
-                <Input placeholder="BTCS22-001" className="bg-secondary/50 border-border text-foreground h-11 rounded-xl" />
+                <Input
+                  placeholder="BTCS22-001"
+                  value={enrollment}
+                  onChange={(e) => setEnrollment(e.target.value)}
+                  className="bg-secondary/50 border-border text-foreground h-11 rounded-xl"
+                />
               </div>
             )}
 
@@ -136,13 +182,23 @@ const LoginPage = () => {
               <Input
                 type="email"
                 placeholder={role === "student" ? "you@campus.edu" : "faculty@campus.edu"}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
                 className="bg-secondary/50 border-border text-foreground h-11 rounded-xl"
               />
             </div>
 
             <div className="space-y-2">
               <Label className="text-foreground text-sm">Password</Label>
-              <Input type="password" placeholder="••••••••" className="bg-secondary/50 border-border text-foreground h-11 rounded-xl" />
+              <Input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="bg-secondary/50 border-border text-foreground h-11 rounded-xl"
+              />
             </div>
 
             {isLogin && (
@@ -153,16 +209,21 @@ const LoginPage = () => {
 
             <Button
               type="submit"
+              disabled={loading}
               className="w-full bg-gradient-primary text-white hover:opacity-90 shadow-glow h-11 mt-2 rounded-xl text-sm font-semibold"
             >
-              {isLogin ? "Sign In" : "Create Account"} <ArrowRight className="ml-2 h-4 w-4" />
+              {loading ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Please wait...</>
+              ) : (
+                <>{isLogin ? "Sign In" : "Create Account"} <ArrowRight className="ml-2 h-4 w-4" /></>
+              )}
             </Button>
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
             <button
-              onClick={() => setIsLogin(!isLogin)}
+              onClick={() => { setIsLogin(!isLogin); setError(""); }}
               className="text-primary hover:underline font-medium"
             >
               {isLogin ? "Sign up" : "Sign in"}

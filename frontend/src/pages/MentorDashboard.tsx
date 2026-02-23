@@ -1,16 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Users,
   AlertTriangle,
   TrendingUp,
   BarChart3,
-  Eye,
   ChevronRight,
   Search,
-  Filter,
-  Download,
-  CheckCircle,
+  Loader2,
 } from "lucide-react";
 import {
   BarChart,
@@ -29,29 +26,8 @@ import {
 import { Link } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Input } from "@/components/ui/input";
-
-const classStats = [
-  { label: "Total Students", value: "42", icon: Users, accent: "primary", change: "" },
-  { label: "Avg Performance", value: "74.6", icon: BarChart3, accent: "accent", change: "+3.2% from last sem" },
-  { label: "At Risk", value: "5", icon: AlertTriangle, accent: "destructive", change: "Need attention" },
-  { label: "Improving", value: "28", icon: TrendingUp, accent: "accent", change: "67% of class" },
-];
-
-const cgpaDistribution = [
-  { range: "6.0-6.5", count: 3 },
-  { range: "6.5-7.0", count: 5 },
-  { range: "7.0-7.5", count: 8 },
-  { range: "7.5-8.0", count: 10 },
-  { range: "8.0-8.5", count: 9 },
-  { range: "8.5-9.0", count: 5 },
-  { range: "9.0+", count: 2 },
-];
-
-const attendanceData = [
-  { name: "Above 85%", value: 22, color: "hsl(160, 84%, 39%)" },
-  { name: "75-85%", value: 12, color: "hsl(217, 91%, 60%)" },
-  { name: "Below 75%", value: 8, color: "hsl(0, 72%, 51%)" },
-];
+import api from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 const trendData = [
   { month: "Aug", current: 68, past: 72 },
@@ -63,19 +39,7 @@ const trendData = [
   { month: "Feb", current: 74.6, past: 73 },
 ];
 
-const students = [
-  { name: "Karan Verma", cgpa: 7.5, problems: 220, attendance: 65, status: "danger", trend: "down" },
-  { name: "Arjun Kumar", cgpa: 7.9, problems: 260, attendance: 72, status: "warning", trend: "same" },
-  { name: "Divya Nair", cgpa: 7.7, problems: 240, attendance: 68, status: "warning", trend: "up" },
-  { name: "Meera Iyer", cgpa: 6.8, problems: 120, attendance: 60, status: "danger", trend: "down" },
-  { name: "Rahul Sinha", cgpa: 7.2, problems: 180, attendance: 70, status: "warning", trend: "same" },
-  { name: "Aarav Patel", cgpa: 9.4, problems: 512, attendance: 92, status: "ok", trend: "up" },
-  { name: "Priya Sharma", cgpa: 9.1, problems: 480, attendance: 88, status: "ok", trend: "up" },
-  { name: "Sneha Reddy", cgpa: 8.1, problems: 275, attendance: 80, status: "ok", trend: "same" },
-  { name: "Nakul Gupta", cgpa: 8.42, problems: 347, attendance: 78, status: "ok", trend: "up" },
-];
-
-const statusMap = {
+const statusMap: Record<string, { label: string; className: string }> = {
   ok: { label: "Healthy", className: "bg-accent/10 text-accent border-accent/20" },
   warning: { label: "Warning", className: "bg-warning/10 text-warning border-warning/20" },
   danger: { label: "At Risk", className: "bg-destructive/10 text-destructive border-destructive/20" },
@@ -89,28 +53,68 @@ const tooltipStyle = {
 };
 
 const MentorDashboard = () => {
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "danger" | "warning" | "ok">("all");
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const result = await api.getMentorDashboard();
+        setData(result);
+      } catch (err) {
+        console.error("Failed to load mentor dashboard:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <DashboardLayout title="Mentor Dashboard" subtitle="Loading..." role="mentor">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const stats = data?.stats || { totalStudents: 0, atRiskCount: 0, averageCGPA: "0", section: "" };
+  const students = data?.students || [];
+  const cgpaDistribution = data?.cgpaDistribution || [];
+  const attendanceDistribution = data?.attendanceDistribution || [];
+
+  const classStats = [
+    { label: "Total Students", value: String(stats.totalStudents), icon: Users, accent: "primary", change: "" },
+    { label: "Avg CGPA", value: stats.averageCGPA, icon: BarChart3, accent: "accent", change: `Section ${stats.section}` },
+    { label: "At Risk", value: String(stats.atRiskCount), icon: AlertTriangle, accent: "destructive", change: "Need attention" },
+    { label: "Performing Well", value: String(stats.totalStudents - stats.atRiskCount), icon: TrendingUp, accent: "accent", change: `${stats.totalStudents > 0 ? Math.round(((stats.totalStudents - stats.atRiskCount) / stats.totalStudents) * 100) : 0}% of class` },
+  ];
 
   const filteredStudents = students
-    .filter((s) => filter === "all" || s.status === filter)
-    .filter((s) => s.name.toLowerCase().includes(search.toLowerCase()));
+    .filter((s: any) => filter === "all" || s.status === filter)
+    .filter((s: any) => s.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <DashboardLayout title="Mentor Dashboard" subtitle="Class CS-2026 — Dr. Sharma" role="mentor">
+    <DashboardLayout title="Mentor Dashboard" subtitle={`Section ${stats.section} — ${user?.name || "Mentor"}`} role="mentor">
       {/* At-risk alert */}
-      <motion.div
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        className="flex items-center gap-3 rounded-xl p-4 bg-destructive/10 border border-destructive/20 text-destructive mb-6"
-      >
-        <AlertTriangle className="h-5 w-5 shrink-0" />
-        <div className="flex-1">
-          <p className="text-sm font-semibold">5 students are at risk!</p>
-          <p className="text-xs opacity-80">Karan Verma, Meera Iyer need immediate attention — attendance & performance below threshold.</p>
-        </div>
-        <Link to="/mentor/alerts" className="text-xs font-medium underline shrink-0">View All</Link>
-      </motion.div>
+      {stats.atRiskCount > 0 && (
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="flex items-center gap-3 rounded-xl p-4 bg-destructive/10 border border-destructive/20 text-destructive mb-6"
+        >
+          <AlertTriangle className="h-5 w-5 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold">{stats.atRiskCount} students need attention!</p>
+            <p className="text-xs opacity-80">Students with attendance below 75% or declining performance.</p>
+          </div>
+        </motion.div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -125,8 +129,8 @@ const MentorDashboard = () => {
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-medium text-muted-foreground">{stat.label}</span>
               <div className={`h-9 w-9 rounded-xl flex items-center justify-center ${stat.accent === "primary" ? "bg-primary/10 text-primary" :
-                  stat.accent === "accent" ? "bg-accent/10 text-accent" :
-                    "bg-destructive/10 text-destructive"
+                stat.accent === "accent" ? "bg-accent/10 text-accent" :
+                  "bg-destructive/10 text-destructive"
                 }`}>
                 <stat.icon className="h-4 w-4" />
               </div>
@@ -169,8 +173,8 @@ const MentorDashboard = () => {
           <p className="text-xs text-muted-foreground mb-4">Student attendance distribution</p>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
-              <Pie data={attendanceData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" strokeWidth={0}>
-                {attendanceData.map((entry, i) => (
+              <Pie data={attendanceDistribution} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" strokeWidth={0}>
+                {attendanceDistribution.map((entry: any, i: number) => (
                   <Cell key={i} fill={entry.color} />
                 ))}
               </Pie>
@@ -178,7 +182,7 @@ const MentorDashboard = () => {
             </PieChart>
           </ResponsiveContainer>
           <div className="flex justify-center gap-4 mt-2">
-            {attendanceData.map((d) => (
+            {attendanceDistribution.map((d: any) => (
               <div key={d.name} className="flex items-center gap-1.5">
                 <div className="h-2 w-2 rounded-full" style={{ background: d.color }} />
                 <span className="text-[10px] text-muted-foreground">{d.name} ({d.value})</span>
@@ -238,11 +242,11 @@ const MentorDashboard = () => {
                   key={f}
                   onClick={() => setFilter(f)}
                   className={`text-[10px] font-medium px-2.5 py-1 rounded-md border transition-all ${filter === f
-                      ? f === "danger" ? "bg-destructive/10 text-destructive border-destructive/20"
-                        : f === "warning" ? "bg-warning/10 text-warning border-warning/20"
-                          : f === "ok" ? "bg-accent/10 text-accent border-accent/20"
-                            : "bg-primary/10 text-primary border-primary/20"
-                      : "text-muted-foreground border-border hover:bg-secondary/50"
+                    ? f === "danger" ? "bg-destructive/10 text-destructive border-destructive/20"
+                      : f === "warning" ? "bg-warning/10 text-warning border-warning/20"
+                        : f === "ok" ? "bg-accent/10 text-accent border-accent/20"
+                          : "bg-primary/10 text-primary border-primary/20"
+                    : "text-muted-foreground border-border hover:bg-secondary/50"
                     }`}
                 >
                   {f === "all" ? "All" : f === "danger" ? "At Risk" : f === "warning" ? "Warning" : "Healthy"}
@@ -261,17 +265,17 @@ const MentorDashboard = () => {
           </div>
         </div>
         <div className="divide-y divide-border/50">
-          {filteredStudents.map((student) => {
-            const status = statusMap[student.status as keyof typeof statusMap];
+          {filteredStudents.map((student: any) => {
+            const status = statusMap[student.status] || statusMap.ok;
             return (
               <Link
-                key={student.name}
+                key={student.id || student.name}
                 to={`/mentor/students?name=${encodeURIComponent(student.name)}`}
                 className="flex items-center justify-between px-4 py-3.5 hover:bg-secondary/30 transition-colors"
               >
                 <div className="flex items-center gap-3">
                   <div className="h-9 w-9 rounded-lg bg-gradient-primary flex items-center justify-center text-xs font-bold text-white">
-                    {student.name.split(" ").map((n) => n[0]).join("")}
+                    {student.name.split(" ").map((n: string) => n[0]).join("")}
                   </div>
                   <div>
                     <span className="text-sm font-medium text-foreground">{student.name}</span>
