@@ -1,111 +1,79 @@
 import { Router, Request, Response } from "express";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import prisma from "../lib/prisma";
-import { JWT_SECRET } from "../middleware/auth";
+import { createClerkClient } from "@clerk/clerk-sdk-node";
+
+const clerk = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
 
 const router = Router();
 
-// POST /api/auth/register
-router.post("/register", async (req: Request, res: Response) => {
+// POST /api/auth/sync
+// This endpoint is called by the frontend after a successful Clerk login/signup
+router.post("/sync", async (req: Request, res: Response) => {
     try {
-        const { email, password, name, role, enrollment, section, semester, branch, year, department, designation } = req.body;
+        console.log("🔄 Syncing user identity...", req.body);
+        const authHeader = req.headers["authorization"];
+        const token = authHeader && authHeader.split(" ")[1];
 
-        if (!email || !password || !name || !role) {
-            return res.status(400).json({ error: "email, password, name, and role are required" });
+        if (!token) {
+            return res.status(401).json({ error: "No session token provided" });
         }
 
-        if (!["STUDENT", "MENTOR"].includes(role)) {
-            return res.status(400).json({ error: "role must be STUDENT or MENTOR" });
+        // Verify with Clerk first
+        const session = await clerk.verifyToken(token);
+        const { clerkId, email, name } = req.body;
+
+        if (!clerkId || !email) {
+            return res.status(400).json({ error: "clerkId and email are required for sync" });
         }
 
-        // Check if user exists
-        const existing = await prisma.user.findUnique({ where: { email } });
-        if (existing) {
-            return res.status(409).json({ error: "Email already registered" });
+        if (session.sub !== clerkId) {
+            return res.status(403).json({ error: "Token does not match clerkId" });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const user = await prisma.user.create({
-            data: {
-                email,
-                password: hashedPassword,
-                name,
-                role,
-                ...(role === "STUDENT" && {
-                    student: {
-                        create: {
-                            enrollment: enrollment || `STU-${Date.now()}`,
-                            section: section || "CS-A",
-                            semester: semester || "1st Semester",
-                            branch: branch || "Computer Science & Engineering",
-                            year: year || "1st Year",
-                        },
-                    },
-                }),
-                ...(role === "MENTOR" && {
-                    mentor: {
-                        create: {
-                            department: department || "Computer Science",
-                            designation: designation || "Assistant Professor",
-                            section: section || "CS-A",
-                        },
-                    },
-                }),
-            },
-            include: {
-                student: true,
-                mentor: true,
-            },
-        });
-
-        const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
-
-        return res.status(201).json({
-            token,
-            user: {
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                role: user.role,
-                studentId: user.student?.id,
-                mentorId: user.mentor?.id,
-            },
-        });
-    } catch (error: any) {
-        console.error("Register error:", error);
-        return res.status(500).json({ error: "Registration failed" });
-    }
-});
-
-// POST /api/auth/login
-router.post("/login", async (req: Request, res: Response) => {
-    try {
-        const { email, password } = req.body;
-
-        if (!email || !password) {
-            return res.status(400).json({ error: "email and password are required" });
-        }
-
-        const user = await prisma.user.findUnique({
-            where: { email },
-            include: { student: true, mentor: true },
+        // 1. Check if user already exists in local DB
+        let user = await prisma.user.findUnique({
+            where: { clerkId },
+            include: { student: true, mentor: true }
         });
 
         if (!user) {
-            return res.status(401).json({ error: "Invalid credentials" });
-        }
+            // 2. If not, check if a user with this email exists (maybe they registered before Clerk)
+            user = await prisma.user.findUnique({
+                where: { email },
+                include: { student: true, mentor: true }
+            });
 
-        const valid = await bcrypt.compare(password, user.password);
-        if (!valid) {
-            return res.status(401).json({ error: "Invalid credentials" });
+            if (user) {
+                // Link existing user to Clerk
+                user = await prisma.user.update({
+                    where: { id: user.id },
+                    data: { clerkId },
+                    include: { student: true, mentor: true }
+                });
+            } else {
+                // 3. Create a brand new user (Default to STUDENT for now)
+                user = await prisma.user.create({
+                    data: {
+                        clerkId,
+                        email,
+                        name: name || email.split("@")[0],
+                        role: "STUDENT",
+                        student: {
+                            create: {
+                                enrollment: `STU-${Date.now()}`,
+                                section: "CS-A",
+                                semester: "1st Semester",
+                                branch: "Computer Science & Engineering",
+                                year: "1st Year",
+                            },
+                        },
+                    },
+                    include: { student: true, mentor: true }
+                });
+            }
         }
-
-        const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
 
         return res.json({
-            token,
             user: {
                 id: user.id,
                 email: user.email,
@@ -116,8 +84,8 @@ router.post("/login", async (req: Request, res: Response) => {
             },
         });
     } catch (error: any) {
-        console.error("Login error:", error);
-        return res.status(500).json({ error: "Login failed" });
+        console.error("Sync error:", error);
+        return res.status(500).json({ error: "Failed to synchronize user" });
     }
 });
 

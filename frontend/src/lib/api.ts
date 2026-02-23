@@ -20,7 +20,7 @@ class ApiClient {
         return this.token;
     }
 
-    private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+    public async request<T>(path: string, options: RequestInit = {}): Promise<T> {
         const headers: Record<string, string> = {
             "Content-Type": "application/json",
             ...(options.headers as Record<string, string>),
