@@ -4,9 +4,10 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-    console.log("🌱 Clearing and seeding database for live testing...\n");
+    // console.log("🌱 Clearing and seeding database for live testing...\n");
 
-    // Clean existing data
+    // Clean existing data (COMMENTED OUT TO PREVENT DATA LOSS)
+    /*
     await prisma.notification.deleteMany();
     await prisma.event.deleteMany();
     await prisma.studentSkill.deleteMany();
@@ -20,6 +21,7 @@ async function main() {
     await prisma.mentor.deleteMany();
     await prisma.user.deleteMany();
     await prisma.subject.deleteMany();
+    */
 
     const hashedPassword = await bcrypt.hash("password123", 10);
 
@@ -34,20 +36,34 @@ async function main() {
     ];
 
     for (const s of subjectsData) {
-        await prisma.subject.create({ data: s });
+        await prisma.subject.upsert({
+            where: { code: s.code },
+            update: s,
+            create: s,
+        });
     }
-    console.log(`✅ Created ${subjectsData.length} subjects`);
+    console.log(`✅ Upserted ${subjectsData.length} subjects`);
 
     // ─── Create Skills ────────────────────────────────
     const skillNames = ["C++", "Python", "JavaScript", "React", "Node.js", "SQL", "Data Structures", "Algorithms", "Machine Learning", "Git"];
     for (const name of skillNames) {
-        await prisma.skill.create({ data: { name } });
+        await prisma.skill.upsert({
+            where: { name },
+            update: {},
+            create: { name }
+        });
     }
-    console.log(`✅ Created ${skillNames.length} skills`);
+    console.log(`✅ Upserted ${skillNames.length} skills`);
 
     // ─── Create Main Mentor ───────────────────────────
-    const mentorUser = await prisma.user.create({
-        data: {
+    const mentorUser = await prisma.user.upsert({
+        where: { email: "mentor@campus.edu" },
+        update: {
+            password: hashedPassword,
+            name: "Main Mentor",
+            role: "MENTOR",
+        },
+        create: {
             email: "mentor@campus.edu",
             password: hashedPassword,
             name: "Main Mentor",
@@ -61,7 +77,7 @@ async function main() {
             },
         },
     });
-    console.log(`✅ Created mentor: ${mentorUser.name}`);
+    console.log(`✅ Upserted mentor: ${mentorUser.name}`);
 
     console.log("\n🎉 Database is now CLEAN and ready for students to register!\n");
     console.log("Mentor Credentials:");
